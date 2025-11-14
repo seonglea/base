@@ -1,0 +1,16 @@
+{
+  "accountAssociation": {
+    "header": "REPLACE_WITH_YOUR_HEADER",
+    "payload": "REPLACE_WITH_YOUR_PAYLOAD",
+    "signature": "REPLACE_WITH_YOUR_SIGNATURE"
+  },
+  "frame": {
+    "version": "next",
+    "name": "Find X Friends",
+    "iconUrl": "https://your-app-url.vercel.app/icon.png",
+    "homeUrl": "https://your-app-url.vercel.app",
+    "splashImageUrl": "https://your-app-url.vercel.app/splash.png",
+    "splashBackgroundColor": "#ffffff",
+    "webhookUrl": "https://your-app-url.vercel.app/api/webhook"
+  }
+}
