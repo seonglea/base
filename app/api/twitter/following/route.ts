@@ -2,17 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyPayment } from '@/lib/contract';
 import { getTwitterFollowing, extractUsernames } from '@/lib/rapidapi';
 import { getCache, setCache, CACHE_KEYS, CACHE_TTL } from '@/lib/redis';
+import { withSecurity } from '@/lib/security';
 
 /**
  * POST /api/twitter/following
  * Get user's Twitter following list
  * Requires payment verification (except for first query)
+ *
+ * SECURITY: Protected with rate limiting and origin verification
+ * API keys (RAPIDAPI_KEY) are only used server-side and never exposed to client
  */
-export async function POST(request: NextRequest) {
+async function handler(request: NextRequest) {
   try {
     const body = await request.json();
     const { address, twitterUsername, txHash } = body;
 
+    // Validation
     if (!address) {
       return NextResponse.json(
         { error: 'Wallet address is required' },
@@ -27,7 +32,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Verify payment
+    // Sanitize input to prevent injection
+    const sanitizedUsername = twitterUsername
+      .replace(/[^a-zA-Z0-9_]/g, '')
+      .substring(0, 15);
+
+    if (sanitizedUsername.length === 0) {
+      return NextResponse.json(
+        { error: 'Invalid Twitter username' },
+        { status: 400 }
+      );
+    }
+
+    // 1. Verify payment (on-chain verification)
     const isPaymentValid = await verifyPayment(address, txHash);
 
     if (!isPaymentValid) {
@@ -50,7 +67,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Fetch from RapidAPI
-    const followingUsers = await getTwitterFollowing(twitterUsername, 200);
+    // IMPORTANT: RAPIDAPI_KEY is only available server-side
+    // It's never included in the client JavaScript bundle
+    const followingUsers = await getTwitterFollowing(sanitizedUsername, 200);
     const usernames = extractUsernames(followingUsers);
 
     // 4. Cache the results
@@ -72,3 +91,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Export with security middleware
+export const POST = withSecurity(handler);
