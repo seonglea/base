@@ -1,61 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyPayment } from '@/lib/contract';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { getTwitterFollowing, extractUsernames } from '@/lib/rapidapi';
 import { getCache, setCache, CACHE_KEYS, CACHE_TTL } from '@/lib/redis';
 import { withSecurity } from '@/lib/security';
 
 /**
  * POST /api/twitter/following
- * Get user's Twitter following list
- * Requires payment verification (except for first query)
+ * Get authenticated user's Twitter following list
  *
- * SECURITY: Protected with rate limiting and origin verification
- * API keys (RAPIDAPI_KEY) are only used server-side and never exposed to client
+ * SECURITY:
+ * - Requires Twitter OAuth authentication
+ * - Only fetches logged-in user's own data
+ * - Protected with rate limiting and origin verification
+ * - API keys only used server-side
  */
 async function handler(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { address, twitterUsername, txHash } = body;
+    // 1. Check authentication
+    const session = await getServerSession(authOptions);
 
-    // Validation
-    if (!address) {
+    if (!session || !session.user?.twitterUsername) {
       return NextResponse.json(
-        { error: 'Wallet address is required' },
-        { status: 400 }
+        { error: 'Please sign in with Twitter first' },
+        { status: 401 }
       );
     }
 
-    if (!twitterUsername) {
-      return NextResponse.json(
-        { error: 'Twitter username is required' },
-        { status: 400 }
-      );
-    }
-
-    // Sanitize input to prevent injection
-    const sanitizedUsername = twitterUsername
-      .replace(/[^a-zA-Z0-9_]/g, '')
-      .substring(0, 15);
-
-    if (sanitizedUsername.length === 0) {
-      return NextResponse.json(
-        { error: 'Invalid Twitter username' },
-        { status: 400 }
-      );
-    }
-
-    // 1. Verify payment (on-chain verification)
-    const isPaymentValid = await verifyPayment(address, txHash);
-
-    if (!isPaymentValid) {
-      return NextResponse.json(
-        { error: 'Payment verification failed. Please complete payment first.' },
-        { status: 403 }
-      );
-    }
+    const twitterUsername = session.user.twitterUsername;
+    const twitterId = session.user.twitterId || twitterUsername;
 
     // 2. Check cache first
-    const cacheKey = CACHE_KEYS.twitterFollowing(address);
+    const cacheKey = CACHE_KEYS.twitterFollowing(twitterId);
     const cachedData = await getCache<string[]>(cacheKey);
 
     if (cachedData) {
@@ -63,22 +39,23 @@ async function handler(request: NextRequest) {
         data: cachedData,
         source: 'cache',
         count: cachedData.length,
+        username: twitterUsername,
       });
     }
 
     // 3. Fetch from RapidAPI
     // IMPORTANT: RAPIDAPI_KEY is only available server-side
-    // It's never included in the client JavaScript bundle
-    const followingUsers = await getTwitterFollowing(sanitizedUsername, 200);
+    const followingUsers = await getTwitterFollowing(twitterUsername, 200);
     const usernames = extractUsernames(followingUsers);
 
-    // 4. Cache the results
+    // 4. Cache the results (24 hours)
     await setCache(cacheKey, usernames, CACHE_TTL.twitterFollowing);
 
     return NextResponse.json({
       data: usernames,
       source: 'api',
       count: usernames.length,
+      username: twitterUsername,
     });
   } catch (error) {
     console.error('Error fetching Twitter following:', error);
