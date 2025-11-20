@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 import { getTwitterFollowing, extractUsernames } from '@/lib/rapidapi';
 import { getCache, setCache, CACHE_KEYS, CACHE_TTL } from '@/lib/redis';
 import { withSecurity } from '@/lib/security';

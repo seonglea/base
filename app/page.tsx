@@ -2,13 +2,34 @@
 
 import { useState } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
-import { useAccount } from 'wagmi';
-import { ConnectWallet, Wallet, WalletDropdown, WalletDropdownDisconnect } from '@coinbase/onchainkit/wallet';
-import { PaymentGate } from '@/components/PaymentGate';
 import { FriendsList, MatchedFriend } from '@/components/FriendsList';
 
-// Feature flag
+// Conditional imports for paid mode
 const PAYMENTS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_PAYMENTS === 'true';
+
+let useAccount: any = () => ({ address: null, isConnected: false });
+let ConnectWallet: any = null;
+let Wallet: any = null;
+let WalletDropdown: any = null;
+let WalletDropdownDisconnect: any = null;
+let PaymentGate: any = null;
+
+if (PAYMENTS_ENABLED) {
+  try {
+    const wagmi = require('wagmi');
+    useAccount = wagmi.useAccount;
+
+    const onchainkit = require('@coinbase/onchainkit/wallet');
+    ConnectWallet = onchainkit.ConnectWallet;
+    Wallet = onchainkit.Wallet;
+    WalletDropdown = onchainkit.WalletDropdown;
+    WalletDropdownDisconnect = onchainkit.WalletDropdownDisconnect;
+
+    PaymentGate = require('@/components/PaymentGate').PaymentGate;
+  } catch (e) {
+    console.warn('Payment mode dependencies not available');
+  }
+}
 
 type Step = 'signin' | 'connect-wallet' | 'ready' | 'payment' | 'loading' | 'results';
 
