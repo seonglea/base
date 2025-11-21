@@ -2,13 +2,20 @@
 
 A Base Mini App that helps users discover which of their X (Twitter) friends are on Farcaster.
 
-## Features
+## 🚀 빠른 시작
 
-- **Free First Query**: Your first search is completely free
-- **Paid Queries**: Subsequent queries cost $1 USDC on Base
-- **Smart Wallet Support**: Uses Base Smart Wallets for seamless transactions
-- **Social Actions**: Follow and message your friends on Farcaster
-- **Efficient Caching**: Uses Redis to cache results and reduce API costs
+**로컬에서 테스트하고 싶으시다면:**
+- 👉 [QUICK_START.md](./QUICK_START.md) - 5분 만에 시작
+- 📖 [LOCAL_SETUP.md](./LOCAL_SETUP.md) - 상세한 설정 가이드
+
+## ✨ Features
+
+- **🆓 무료 모드**: 테스트를 위한 완전 무료 모드 (결제 없음, 지갑 연결 불필요)
+- **💰 유료 모드**: 환경 변수 하나로 쉽게 전환 (첫 쿼리 무료, 이후 $1 USDC)
+- **🔐 Twitter OAuth**: 안전한 소셜 로그인으로 본인 친구 목록만 조회
+- **⚡ Smart Wallet Support**: Base Smart Wallets로 원활한 트랜잭션
+- **💬 Social Actions**: Farcaster에서 친구 팔로우 및 메시지 기능
+- **📦 Efficient Caching**: Redis를 사용한 API 비용 최적화
 
 ## Tech Stack
 
@@ -61,68 +68,60 @@ A Base Mini App that helps users discover which of their X (Twitter) friends are
         └── farcaster.json          # Farcaster manifest
 ```
 
-## Getting Started
+## 🎯 Getting Started
 
-### Prerequisites
+### 로컬 테스트 (무료 모드)
 
-- Node.js 18+
-- npm or yarn
-- Wallet with Base Mainnet access
-- API keys (see Environment Variables)
+**상세 가이드**: [QUICK_START.md](./QUICK_START.md) 또는 [LOCAL_SETUP.md](./LOCAL_SETUP.md)
 
-### Installation
-
-1. Clone the repository:
+1. **프로젝트 클론**
 ```bash
-git clone <repository-url>
+git clone https://github.com/YOUR_USERNAME/base.git
 cd base
-```
-
-2. Install dependencies:
-```bash
 npm install
 ```
 
-3. Set up environment variables:
-```bash
-cp .env.example .env.local
-```
-
-Edit `.env.local` with your actual values:
-
+2. **환경 변수 설정** (`.env.local` 파일 생성)
 ```env
-# Farcaster & MiniKit
-NEXT_PUBLIC_CDP_API_KEY=your_coinbase_api_key
-NEXT_PUBLIC_PROJECT_NAME="Find X Friends"
-NEXT_PUBLIC_URL=http://localhost:3000
+# 무료 모드 활성화
+NEXT_PUBLIC_ENABLE_PAYMENTS=false
 
-# Neynar API
-NEYNAR_API_KEY=your_neynar_api_key
+# NextAuth 설정
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=랜덤_문자열_여기에
 
-# RapidAPI (Twitter)
-RAPIDAPI_KEY=your_rapidapi_key
-RAPIDAPI_HOST=twitter-api45.p.rapidapi.com
+# Twitter OAuth (필수!)
+TWITTER_CLIENT_ID=발급받은_클라이언트_ID
+TWITTER_CLIENT_SECRET=발급받은_클라이언트_시크릿
 
-# Redis (Upstash)
-UPSTASH_REDIS_REST_URL=your_upstash_url
-UPSTASH_REDIS_REST_TOKEN=your_upstash_token
-
-# Smart Contract (after deployment)
-NEXT_PUBLIC_CONTRACT_ADDRESS=0x...
-NEXT_PUBLIC_PAYMENT_AMOUNT=1000000
-NEXT_PUBLIC_USDC_ADDRESS=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
-
-# Chain
-NEXT_PUBLIC_CHAIN_ID=8453
-NEXT_PUBLIC_RPC_URL=https://mainnet.base.org
+# API Keys (필수)
+NEYNAR_API_KEY=발급받은_키
+RAPIDAPI_KEY=발급받은_키
+UPSTASH_REDIS_REST_URL=발급받은_URL
+UPSTASH_REDIS_REST_TOKEN=발급받은_토큰
 ```
 
-4. Run the development server:
+3. **실행**
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to see the app.
+4. **브라우저에서 http://localhost:3000 열기**
+
+### 유료 모드로 전환 (배포 시)
+
+`.env.local`에서 한 줄만 변경:
+```env
+NEXT_PUBLIC_ENABLE_PAYMENTS=true
+```
+
+그리고 다음 추가:
+```env
+NEXT_PUBLIC_CDP_API_KEY=your_coinbase_api_key
+NEXT_PUBLIC_CONTRACT_ADDRESS=배포된_컨트랙트_주소
+```
+
+자세한 내용: [MODES.md](./MODES.md)
 
 ## Smart Contract Deployment
 
@@ -148,15 +147,26 @@ npm install --save-dev hardhat @nomicfoundation/hardhat-toolbox
 npx hardhat run scripts/deploy.js --network base
 ```
 
-## API Keys Setup
+## 🔑 API Keys Setup
 
-### 1. Coinbase Developer Platform (CDP)
-- Go to [Coinbase Cloud](https://cloud.coinbase.com/)
-- Create a new project
-- Get your API key
-- Add to `NEXT_PUBLIC_CDP_API_KEY`
+### 1. Twitter OAuth (필수! - 가장 먼저 설정)
+**이 설정이 없으면 로그인이 안 됩니다!**
 
-### 2. Neynar API
+1. https://developer.twitter.com/en/portal/dashboard 방문
+2. "Create Project" → "Create App" 클릭
+3. **User authentication settings** 설정:
+   - App permissions: **Read**
+   - Type of App: **Web App**
+   - Callback URL: `http://localhost:3000/api/auth/callback/twitter`
+   - Website URL: `http://localhost:3000`
+4. Client ID와 Client Secret 복사
+5. `.env.local`에 추가:
+   ```env
+   TWITTER_CLIENT_ID=발급받은_클라이언트_ID
+   TWITTER_CLIENT_SECRET=발급받은_클라이언트_시크릿
+   ```
+
+### 2. Neynar API (Farcaster 데이터)
 - Go to [Neynar](https://neynar.com/)
 - Sign up and create an API key
 - Add to `NEYNAR_API_KEY`
@@ -167,11 +177,23 @@ npx hardhat run scripts/deploy.js --network base
 - Get your API key and host
 - Add to `RAPIDAPI_KEY` and `RAPIDAPI_HOST`
 
-### 4. Upstash Redis
+### 4. Upstash Redis (캐싱)
 - Go to [Upstash](https://upstash.com/)
-- Create a Redis database
+- Create a Redis database (Regional)
 - Get REST URL and token
-- Add to environment variables
+- Add to environment variables:
+  ```env
+  UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
+  UPSTASH_REDIS_REST_TOKEN=발급받은_토큰
+  ```
+
+### 5. Coinbase Developer Platform (유료 모드에서만 필요)
+- Go to [Coinbase Cloud](https://cloud.coinbase.com/)
+- Create a new project
+- Get your API key
+- Add to `NEXT_PUBLIC_CDP_API_KEY`
+
+📚 **자세한 API 설정 가이드**: [LOCAL_SETUP.md](./LOCAL_SETUP.md)
 
 ## Deployment to Vercel
 
