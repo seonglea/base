@@ -1,30 +1,63 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAccount } from 'wagmi';
-import { ConnectWallet, Wallet, WalletDropdown, WalletDropdownDisconnect } from '@coinbase/onchainkit/wallet';
-import { PaymentGate } from '@/components/PaymentGate';
+import { useState } from 'react';
+import { useSession, signIn, signOut } from 'next-auth/react';
+import Image from 'next/image';
 import { FriendsList, MatchedFriend } from '@/components/FriendsList';
 
-type Step = 'connect' | 'twitter-input' | 'payment' | 'loading' | 'results';
+// Conditional imports for paid mode
+const PAYMENTS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_PAYMENTS === 'true';
+
+let useAccount: any = () => ({ address: null, isConnected: false });
+let ConnectWallet: any = null;
+let Wallet: any = null;
+let WalletDropdown: any = null;
+let WalletDropdownDisconnect: any = null;
+let PaymentGate: any = null;
+
+if (PAYMENTS_ENABLED) {
+  try {
+    const wagmi = require('wagmi');
+    useAccount = wagmi.useAccount;
+
+    const onchainkit = require('@coinbase/onchainkit/wallet');
+    ConnectWallet = onchainkit.ConnectWallet;
+    Wallet = onchainkit.Wallet;
+    WalletDropdown = onchainkit.WalletDropdown;
+    WalletDropdownDisconnect = onchainkit.WalletDropdownDisconnect;
+
+    PaymentGate = require('@/components/PaymentGate').PaymentGate;
+  } catch (e) {
+    console.warn('Payment mode dependencies not available');
+  }
+}
+
+type Step = 'signin' | 'connect-wallet' | 'ready' | 'payment' | 'loading' | 'results';
 
 export default function Home() {
+  const { data: session, status } = useSession();
   const { address, isConnected } = useAccount();
-  const [step, setStep] = useState<Step>('connect');
-  const [twitterUsername, setTwitterUsername] = useState('');
+  const [step, setStep] = useState<Step>('signin');
   const [friendsData, setFriendsData] = useState<MatchedFriend[]>([]);
   const [totalSearched, setTotalSearched] = useState(0);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (isConnected && step === 'connect') {
-      setStep('twitter-input');
-    } else if (!isConnected && step !== 'connect') {
-      setStep('connect');
+  // Update step based on auth/wallet state
+  if (PAYMENTS_ENABLED) {
+    // Paid mode: Twitter + Wallet required
+    if (status === 'authenticated' && isConnected && step === 'signin') {
+      setStep('payment');
+    } else if (status === 'authenticated' && !isConnected && step === 'signin') {
+      setStep('connect-wallet');
     }
-  }, [isConnected]);
+  } else {
+    // Free mode: Twitter only
+    if (status === 'authenticated' && step === 'signin') {
+      setStep('ready');
+    }
+  }
 
-  const handlePaymentSuccess = async (txHash?: string) => {
+  const handleFindFriends = async (txHash?: string) => {
     setStep('loading');
     setError('');
 
@@ -33,11 +66,7 @@ export default function Home() {
       const twitterResponse = await fetch('/api/twitter/following', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          address,
-          twitterUsername,
-          txHash,
-        }),
+        body: JSON.stringify({ txHash }),
       });
 
       if (!twitterResponse.ok) {
@@ -52,10 +81,7 @@ export default function Home() {
       const matchResponse = await fetch('/api/farcaster/match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          twitterHandles,
-          address,
-        }),
+        body: JSON.stringify({ twitterHandles }),
       });
 
       if (!matchResponse.ok) {
@@ -70,12 +96,12 @@ export default function Home() {
     } catch (err) {
       console.error('Error:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
-      setStep('payment');
+      setStep(PAYMENTS_ENABLED ? 'payment' : 'ready');
     }
   };
 
   const handleStartOver = () => {
-    setStep('twitter-input');
+    setStep(PAYMENTS_ENABLED ? 'payment' : 'ready');
     setFriendsData([]);
     setTotalSearched(0);
     setError('');
@@ -87,26 +113,56 @@ export default function Home() {
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="text-2xl">🔍</div>
+            {/* Logo - will display when logo.png is added to public/ folder */}
+            <Image
+              src="/logo.png"
+              alt="Find X Friends Logo"
+              width={40}
+              height={40}
+              className="rounded-lg"
+              onError={(e) => {
+                // Fallback to emoji if logo not found
+                e.currentTarget.style.display = 'none';
+                if (e.currentTarget.nextSibling) {
+                  (e.currentTarget.nextSibling as HTMLElement).style.display = 'block';
+                }
+              }}
+            />
+            <div className="text-2xl hidden">🔍</div>
             <h1 className="text-xl font-bold text-gray-900">
               Find X Friends on Farcaster
             </h1>
           </div>
-          {isConnected && (
-            <Wallet>
-              <ConnectWallet />
-              <WalletDropdown>
-                <WalletDropdownDisconnect />
-              </WalletDropdown>
-            </Wallet>
-          )}
+          <div className="flex items-center gap-4">
+            {session && (
+              <div className="text-sm text-gray-600">
+                @{session.user?.twitterUsername}
+              </div>
+            )}
+            {PAYMENTS_ENABLED && isConnected && (
+              <Wallet>
+                <ConnectWallet />
+                <WalletDropdown>
+                  <WalletDropdownDisconnect />
+                </WalletDropdown>
+              </Wallet>
+            )}
+            {session && (
+              <button
+                onClick={() => signOut()}
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                Sign Out
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 py-8">
-        {/* Connect Wallet Step */}
-        {step === 'connect' && (
+        {/* Sign In Step */}
+        {step === 'signin' && status !== 'loading' && (
           <div className="text-center py-12">
             <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto">
               <div className="text-6xl mb-4">👋</div>
@@ -114,72 +170,87 @@ export default function Home() {
                 Welcome!
               </h2>
               <p className="text-gray-600 mb-6">
-                Connect your wallet to find which of your X friends are on Farcaster.
+                Sign in with Twitter to find which of your friends are on Farcaster.
               </p>
-              <div className="mb-4">
-                <Wallet>
-                  <ConnectWallet className="w-full" />
-                </Wallet>
-              </div>
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <button
+                onClick={() => signIn('twitter')}
+                className="w-full bg-[#1DA1F2] hover:bg-[#1a8cd8] text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                </svg>
+                Sign in with Twitter
+              </button>
+              <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
                 <p className="text-sm text-green-800 font-medium">
-                  🎉 First query is completely FREE!
+                  {PAYMENTS_ENABLED ? '🎉 First query FREE!' : '🎉 Completely FREE!'}
                 </p>
                 <p className="text-xs text-green-700 mt-1">
-                  Subsequent queries: $1 USDC on Base
+                  {PAYMENTS_ENABLED
+                    ? 'Then $1 USDC per query'
+                    : 'No payments, no wallet needed'}
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {/* Twitter Username Input Step */}
-        {step === 'twitter-input' && (
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              Enter Your X Username
-            </h2>
-            <p className="text-gray-600 mb-6">
-              We'll fetch your following list and find matches on Farcaster.
-            </p>
-            <input
-              type="text"
-              value={twitterUsername}
-              onChange={(e) => setTwitterUsername(e.target.value.replace('@', ''))}
-              placeholder="username (without @)"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4"
-            />
-            <button
-              onClick={() => setStep('payment')}
-              disabled={!twitterUsername.trim()}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
-            >
-              Continue
-            </button>
+        {/* Connect Wallet Step (Paid mode only) */}
+        {PAYMENTS_ENABLED && step === 'connect-wallet' && (
+          <div className="text-center py-12">
+            <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto">
+              <div className="text-6xl mb-4">👛</div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                Connect Your Wallet
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Connect your Base wallet to enable payments.
+              </p>
+              <Wallet>
+                <ConnectWallet className="w-full" />
+              </Wallet>
+            </div>
           </div>
         )}
 
-        {/* Payment Step */}
-        {step === 'payment' && (
+        {/* Ready Step (Free mode) */}
+        {!PAYMENTS_ENABLED && step === 'ready' && (
           <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">
               Ready to Find Your Friends?
             </h2>
             <p className="text-gray-600 mb-6">
-              Looking for X friends of <span className="font-semibold">@{twitterUsername}</span>
+              We'll search through your Twitter following list and find matches on Farcaster.
             </p>
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
                 <p className="text-sm text-red-800">{error}</p>
               </div>
             )}
-            <PaymentGate onSuccess={handlePaymentSuccess} />
             <button
-              onClick={() => setStep('twitter-input')}
-              className="w-full mt-4 text-sm text-gray-600 hover:text-gray-900"
+              onClick={() => handleFindFriends()}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
             >
-              ← Change username
+              Find My X Friends (FREE)
             </button>
+          </div>
+        )}
+
+        {/* Payment Step (Paid mode) */}
+        {PAYMENTS_ENABLED && step === 'payment' && (
+          <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              Ready to Find Your Friends?
+            </h2>
+            <p className="text-gray-600 mb-6">
+              Looking for X friends of @{session?.user?.twitterUsername}
+            </p>
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
+            <PaymentGate onSuccess={handleFindFriends} />
           </div>
         )}
 
@@ -214,7 +285,7 @@ export default function Home() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                   />
                 </svg>
                 Search Again
@@ -228,16 +299,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="max-w-4xl mx-auto px-4 py-8 text-center text-sm text-gray-500">
         <p>
-          Built with{' '}
-          <a
-            href="https://onchainkit.xyz"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline"
-          >
-            OnchainKit
-          </a>{' '}
-          and{' '}
+          Built for{' '}
           <a
             href="https://base.org"
             target="_blank"
@@ -246,6 +308,16 @@ export default function Home() {
           >
             Base
           </a>
+          {' '}&amp;{' '}
+          <a
+            href="https://farcaster.xyz"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            Farcaster
+          </a>
+          {PAYMENTS_ENABLED && ' • Powered by USDC on Base'}
         </p>
       </footer>
     </div>

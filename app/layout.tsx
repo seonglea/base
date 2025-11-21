@@ -1,14 +1,22 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
-
-const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Find X Friends on Farcaster',
   description: 'Discover which of your X followers are on Farcaster. First query FREE, then $1 USDC per query on Base.',
+  manifest: '/manifest.json',
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
   openGraph: {
+    title: 'Find X Friends on Farcaster',
+    description: 'Discover which of your X followers are on Farcaster',
+    images: ['/og-image.png'],
+  },
+  twitter: {
+    card: 'summary_large_image',
     title: 'Find X Friends on Farcaster',
     description: 'Discover which of your X followers are on Farcaster',
     images: ['/og-image.png'],
@@ -22,7 +30,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className="font-sans antialiased">
         <Providers>{children}</Providers>
       </body>
     </html>

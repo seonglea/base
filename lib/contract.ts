@@ -82,7 +82,7 @@ export async function verifyPayment(
     });
 
     // First query is free
-    if (queryCount === 0n) {
+    if (queryCount === BigInt(0)) {
       return true;
     }
 
