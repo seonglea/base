@@ -27,8 +27,8 @@ async function handler(request: NextRequest) {
       );
     }
 
-    const twitterUsername = session.user.twitterUsername;
-    const twitterId = session.user.twitterId || twitterUsername;
+    const twitterUsername = (session.user as any).twitterUsername;
+    const twitterId = (session.user as any).twitterId || twitterUsername;
 
     // 2. Check cache first
     const cacheKey = CACHE_KEYS.twitterFollowing(twitterId);
