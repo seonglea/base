@@ -6,6 +6,7 @@ import { WagmiProvider } from 'wagmi';
 import { http, createConfig } from 'wagmi';
 import { base } from 'viem/chains';
 import { coinbaseWallet } from 'wagmi/connectors';
+import { FarcasterAuthProvider } from '@/lib/farcaster-auth';
 
 // Dynamically import OnchainKit only in paid mode
 let OnchainKitProvider: any = null;
@@ -39,32 +40,40 @@ const wagmiConfig = PAYMENTS_ENABLED
 const queryClient = new QueryClient();
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  // Free mode: Only SessionProvider
+  // Free mode: SessionProvider + FarcasterAuth
   if (!PAYMENTS_ENABLED || !wagmiConfig) {
-    return <SessionProvider>{children}</SessionProvider>;
+    return (
+      <SessionProvider>
+        <FarcasterAuthProvider>
+          {children}
+        </FarcasterAuthProvider>
+      </SessionProvider>
+    );
   }
 
-  // Paid mode: Full Web3 stack
+  // Paid mode: Full Web3 stack + FarcasterAuth
   if (OnchainKitProvider) {
     return (
       <SessionProvider>
-        <WagmiProvider config={wagmiConfig}>
-          <QueryClientProvider client={queryClient}>
-            <OnchainKitProvider
-              apiKey={process.env.NEXT_PUBLIC_CDP_API_KEY}
-              chain={base}
-              config={{
-                appearance: {
-                  name: process.env.NEXT_PUBLIC_PROJECT_NAME || 'Find X Friends',
-                  mode: 'auto',
-                  theme: 'default',
-                },
-              }}
-            >
-              {children}
-            </OnchainKitProvider>
-          </QueryClientProvider>
-        </WagmiProvider>
+        <FarcasterAuthProvider>
+          <WagmiProvider config={wagmiConfig}>
+            <QueryClientProvider client={queryClient}>
+              <OnchainKitProvider
+                apiKey={process.env.NEXT_PUBLIC_CDP_API_KEY}
+                chain={base}
+                config={{
+                  appearance: {
+                    name: process.env.NEXT_PUBLIC_PROJECT_NAME || 'Find X Friends',
+                    mode: 'auto',
+                    theme: 'default',
+                  },
+                }}
+              >
+                {children}
+              </OnchainKitProvider>
+            </QueryClientProvider>
+          </WagmiProvider>
+        </FarcasterAuthProvider>
       </SessionProvider>
     );
   }
@@ -72,11 +81,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // Fallback if OnchainKit not available
   return (
     <SessionProvider>
-      <WagmiProvider config={wagmiConfig}>
-        <QueryClientProvider client={queryClient}>
-          {children}
-        </QueryClientProvider>
-      </WagmiProvider>
+      <FarcasterAuthProvider>
+        <WagmiProvider config={wagmiConfig}>
+          <QueryClientProvider client={queryClient}>
+            {children}
+          </QueryClientProvider>
+        </WagmiProvider>
+      </FarcasterAuthProvider>
     </SessionProvider>
   );
 }

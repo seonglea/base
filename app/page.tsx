@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { FriendsList, MatchedFriend } from '@/components/FriendsList';
+import { useFarcasterAuth, FarcasterSignInButton } from '@/lib/farcaster-auth';
 
 // Conditional imports for paid mode
 const PAYMENTS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_PAYMENTS === 'true';
@@ -31,30 +32,79 @@ if (PAYMENTS_ENABLED) {
   }
 }
 
-type Step = 'signin' | 'connect-wallet' | 'ready' | 'payment' | 'loading' | 'results';
+type Step = 'signin' | 'farcaster-signin' | 'connect-wallet' | 'ready' | 'payment' | 'loading' | 'results';
 
 export default function Home() {
   const { data: session, status } = useSession();
   const { address, isConnected } = useAccount();
+  const farcasterAuth = useFarcasterAuth();
   const [step, setStep] = useState<Step>('signin');
   const [friendsData, setFriendsData] = useState<MatchedFriend[]>([]);
   const [totalSearched, setTotalSearched] = useState(0);
   const [error, setError] = useState('');
 
-  // Update step based on auth/wallet state
-  if (PAYMENTS_ENABLED) {
-    // Paid mode: Twitter + Wallet required
-    if (status === 'authenticated' && isConnected && step === 'signin') {
-      setStep('payment');
-    } else if (status === 'authenticated' && !isConnected && step === 'signin') {
-      setStep('connect-wallet');
+  // Handle Farcaster auth callback (from URL params)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('farcaster_auth') === 'success') {
+      // Store Farcaster user data from callback
+      const fid = urlParams.get('fid');
+      const signerUuid = urlParams.get('signer_uuid');
+      const username = urlParams.get('fc_username');
+      const displayName = urlParams.get('fc_display_name');
+      const pfpUrl = urlParams.get('fc_pfp_url');
+
+      if (fid && username) {
+        const fcUser = {
+          fid: parseInt(fid),
+          username,
+          displayName: displayName || username,
+          pfpUrl: pfpUrl || '',
+          signerUuid: signerUuid || undefined,
+        };
+        localStorage.setItem('farcaster_user', JSON.stringify(fcUser));
+        if (signerUuid) {
+          localStorage.setItem('farcaster_signer', signerUuid);
+        }
+        // Clean URL
+        window.history.replaceState({}, '', '/');
+        window.location.reload();
+      }
     }
-  } else {
-    // Free mode: Twitter only
-    if (status === 'authenticated' && step === 'signin') {
-      setStep('ready');
+  }, []);
+
+  // Update step based on auth state
+  useEffect(() => {
+    if (status === 'loading' || farcasterAuth.isLoading) return;
+
+    if (PAYMENTS_ENABLED) {
+      // Paid mode: Twitter + Farcaster + Wallet required
+      if (status === 'authenticated' && farcasterAuth.isAuthenticated && isConnected) {
+        if (step === 'signin' || step === 'farcaster-signin' || step === 'connect-wallet') {
+          setStep('payment');
+        }
+      } else if (status === 'authenticated' && farcasterAuth.isAuthenticated && !isConnected) {
+        if (step === 'signin' || step === 'farcaster-signin') {
+          setStep('connect-wallet');
+        }
+      } else if (status === 'authenticated' && !farcasterAuth.isAuthenticated) {
+        if (step === 'signin') {
+          setStep('farcaster-signin');
+        }
+      }
+    } else {
+      // Free mode: Twitter + Farcaster
+      if (status === 'authenticated' && farcasterAuth.isAuthenticated) {
+        if (step === 'signin' || step === 'farcaster-signin') {
+          setStep('ready');
+        }
+      } else if (status === 'authenticated' && !farcasterAuth.isAuthenticated) {
+        if (step === 'signin') {
+          setStep('farcaster-signin');
+        }
+      }
     }
-  }
+  }, [status, farcasterAuth.isAuthenticated, farcasterAuth.isLoading, isConnected, step]);
 
   const handleFindFriends = async (txHash?: string) => {
     setStep('loading');
@@ -119,9 +169,18 @@ export default function Home() {
             </h1>
           </div>
           <div className="flex items-center gap-4">
+            {/* Twitter user */}
             {session && (
-              <div className="text-sm text-gray-600">
-                @{session.user?.twitterUsername}
+              <div className="text-sm text-gray-600 flex items-center gap-1">
+                <span className="text-blue-500">𝕏</span>
+                @{(session.user as any)?.twitterUsername}
+              </div>
+            )}
+            {/* Farcaster user */}
+            {farcasterAuth.isAuthenticated && farcasterAuth.user && (
+              <div className="text-sm text-gray-600 flex items-center gap-1">
+                <span className="text-purple-500">⌐◨-◨</span>
+                @{farcasterAuth.user.username}
               </div>
             )}
             {PAYMENTS_ENABLED && isConnected && (
@@ -132,9 +191,12 @@ export default function Home() {
                 </WalletDropdown>
               </Wallet>
             )}
-            {session && (
+            {(session || farcasterAuth.isAuthenticated) && (
               <button
-                onClick={() => signOut()}
+                onClick={() => {
+                  signOut();
+                  farcasterAuth.signOut();
+                }}
                 className="text-sm text-gray-600 hover:text-gray-900"
               >
                 Sign Out
@@ -175,6 +237,32 @@ export default function Home() {
                     ? 'Then $1 USDC per query'
                     : 'No payments, no wallet needed'}
                 </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Farcaster Sign In Step */}
+        {step === 'farcaster-signin' && (
+          <div className="text-center py-12">
+            <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto">
+              <div className="text-6xl mb-4">⌐◨-◨</div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                Connect Farcaster
+              </h2>
+              <p className="text-gray-600 mb-2">
+                ✅ Twitter connected as @{(session?.user as any)?.twitterUsername}
+              </p>
+              <p className="text-gray-600 mb-6">
+                Now sign in with Farcaster to follow and message your friends.
+              </p>
+              <FarcasterSignInButton className="w-full justify-center" />
+              <div className="mt-4 text-xs text-gray-500">
+                {farcasterAuth.isMiniApp ? (
+                  <span className="text-green-600">✓ Running in Farcaster app</span>
+                ) : (
+                  <span>Running as standalone web app</span>
+                )}
               </div>
             </div>
           </div>
