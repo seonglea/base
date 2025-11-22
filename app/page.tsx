@@ -32,7 +32,18 @@ if (PAYMENTS_ENABLED) {
   }
 }
 
-type Step = 'signin' | 'farcaster-signin' | 'connect-wallet' | 'ready' | 'payment' | 'loading' | 'results';
+// Saved X list data structure
+interface SavedXList {
+  following: string[];
+  followers: string[];
+  followingCount: number;
+  followersCount: number;
+  syncedAt: string;
+  twitterUsername: string;
+}
+
+type Step = 'signin' | 'farcaster-signin' | 'connect-wallet' | 'sync-xlist' | 'ready' | 'payment' | 'loading' | 'results';
+type SearchType = 'following' | 'followers';
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -43,11 +54,15 @@ export default function Home() {
   const [totalSearched, setTotalSearched] = useState(0);
   const [error, setError] = useState('');
 
+  // X List state
+  const [savedXList, setSavedXList] = useState<SavedXList | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [searchType, setSearchType] = useState<SearchType>('following');
+
   // Handle Farcaster auth callback (from URL params)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('farcaster_auth') === 'success') {
-      // Store Farcaster user data from callback
       const fid = urlParams.get('fid');
       const signerUuid = urlParams.get('signer_uuid');
       const username = urlParams.get('fc_username');
@@ -59,19 +74,25 @@ export default function Home() {
           fid: parseInt(fid),
           username,
           displayName: displayName || username,
-          pfpUrl: pfpUrl || '',
+          pfpUrl: pfpUrl ? decodeURIComponent(pfpUrl) : '',
           signerUuid: signerUuid || undefined,
         };
         localStorage.setItem('farcaster_user', JSON.stringify(fcUser));
         if (signerUuid) {
           localStorage.setItem('farcaster_signer', signerUuid);
         }
-        // Clean URL
         window.history.replaceState({}, '', '/');
         window.location.reload();
       }
     }
   }, []);
+
+  // Check for saved X list on mount
+  useEffect(() => {
+    if (status === 'authenticated') {
+      checkSavedXList();
+    }
+  }, [status]);
 
   // Update step based on auth state
   useEffect(() => {
@@ -81,7 +102,7 @@ export default function Home() {
       // Paid mode: Twitter + Farcaster + Wallet required
       if (status === 'authenticated' && farcasterAuth.isAuthenticated && isConnected) {
         if (step === 'signin' || step === 'farcaster-signin' || step === 'connect-wallet') {
-          setStep('payment');
+          setStep('sync-xlist');
         }
       } else if (status === 'authenticated' && farcasterAuth.isAuthenticated && !isConnected) {
         if (step === 'signin' || step === 'farcaster-signin') {
@@ -96,7 +117,7 @@ export default function Home() {
       // Free mode: Twitter + Farcaster
       if (status === 'authenticated' && farcasterAuth.isAuthenticated) {
         if (step === 'signin' || step === 'farcaster-signin') {
-          setStep('ready');
+          setStep('sync-xlist');
         }
       } else if (status === 'authenticated' && !farcasterAuth.isAuthenticated) {
         if (step === 'signin') {
@@ -106,27 +127,79 @@ export default function Home() {
     }
   }, [status, farcasterAuth.isAuthenticated, farcasterAuth.isLoading, isConnected, step]);
 
+  // Check if we have saved X list data
+  const checkSavedXList = async () => {
+    try {
+      const response = await fetch('/api/twitter/sync');
+      const data = await response.json();
+      if (data.hasSavedData && data.data) {
+        setSavedXList(data.data);
+      }
+    } catch (err) {
+      console.error('Error checking saved X list:', err);
+    }
+  };
+
+  // Sync X list (fetch followers + following and save)
+  const handleSyncXList = async () => {
+    setIsSyncing(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/twitter/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to sync X list');
+      }
+
+      const data = await response.json();
+      setSavedXList(data.data);
+    } catch (err) {
+      console.error('Error syncing X list:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Find friends using saved or fresh data
   const handleFindFriends = async (txHash?: string) => {
     setStep('loading');
     setError('');
 
     try {
-      // 1. Fetch Twitter following list
-      const twitterResponse = await fetch('/api/twitter/following', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ txHash }),
-      });
+      // Get the appropriate list based on searchType
+      let twitterHandles: string[] = [];
 
-      if (!twitterResponse.ok) {
-        const errorData = await twitterResponse.json();
-        throw new Error(errorData.error || 'Failed to fetch Twitter data');
+      if (savedXList) {
+        // Use saved data
+        twitterHandles = searchType === 'following' ? savedXList.following : savedXList.followers;
+      } else {
+        // Fetch from API (fallback)
+        const twitterResponse = await fetch('/api/twitter/following', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ txHash }),
+        });
+
+        if (!twitterResponse.ok) {
+          const errorData = await twitterResponse.json();
+          throw new Error(errorData.error || 'Failed to fetch Twitter data');
+        }
+
+        const twitterData = await twitterResponse.json();
+        twitterHandles = twitterData.data;
       }
 
-      const twitterData = await twitterResponse.json();
-      const twitterHandles = twitterData.data;
+      if (twitterHandles.length === 0) {
+        throw new Error(`No ${searchType} found. Please sync your X list first.`);
+      }
 
-      // 2. Match with Farcaster users
+      // Match with Farcaster users
       const matchResponse = await fetch('/api/farcaster/match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -145,15 +218,25 @@ export default function Home() {
     } catch (err) {
       console.error('Error:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
-      setStep(PAYMENTS_ENABLED ? 'payment' : 'ready');
+      setStep('sync-xlist');
     }
   };
 
   const handleStartOver = () => {
-    setStep(PAYMENTS_ENABLED ? 'payment' : 'ready');
+    setStep('sync-xlist');
     setFriendsData([]);
     setTotalSearched(0);
     setError('');
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   return (
@@ -162,21 +245,18 @@ export default function Home() {
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* Logo emoji - simple and always works */}
             <div className="text-2xl">🔍</div>
             <h1 className="text-xl font-bold text-gray-900">
               Find X Friends on Farcaster
             </h1>
           </div>
           <div className="flex items-center gap-4">
-            {/* Twitter user */}
             {session && (
               <div className="text-sm text-gray-600 flex items-center gap-1">
                 <span className="text-blue-500">𝕏</span>
                 @{(session.user as any)?.twitterUsername}
               </div>
             )}
-            {/* Farcaster user */}
             {farcasterAuth.isAuthenticated && farcasterAuth.user && (
               <div className="text-sm text-gray-600 flex items-center gap-1">
                 <span className="text-purple-500">⌐◨-◨</span>
@@ -286,44 +366,119 @@ export default function Home() {
           </div>
         )}
 
-        {/* Ready Step (Free mode) */}
-        {!PAYMENTS_ENABLED && step === 'ready' && (
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto">
+        {/* Sync X List Step */}
+        {step === 'sync-xlist' && (
+          <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg mx-auto">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              Ready to Find Your Friends?
+              📋 X List
             </h2>
-            <p className="text-gray-600 mb-6">
-              We'll search through your Twitter following list and find matches on Farcaster.
-            </p>
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-red-800">{error}</p>
-              </div>
-            )}
-            <button
-              onClick={() => handleFindFriends()}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
-            >
-              Find My X Friends (FREE)
-            </button>
-          </div>
-        )}
 
-        {/* Payment Step (Paid mode) */}
-        {PAYMENTS_ENABLED && step === 'payment' && (
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              Ready to Find Your Friends?
-            </h2>
-            <p className="text-gray-600 mb-6">
-              Looking for X friends of @{session?.user?.twitterUsername}
-            </p>
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
                 <p className="text-sm text-red-800">{error}</p>
               </div>
             )}
-            <PaymentGate onSuccess={handleFindFriends} />
+
+            {/* Saved Data Status */}
+            {savedXList ? (
+              <div className="mb-6">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-green-800 font-medium mb-2">
+                    ✅ X 리스트 저장됨
+                  </p>
+                  <div className="text-xs text-green-700 space-y-1">
+                    <p>팔로잉: {savedXList.followingCount}명</p>
+                    <p>팔로워: {savedXList.followersCount}명</p>
+                    <p>저장일: {formatDate(savedXList.syncedAt)}</p>
+                  </div>
+                </div>
+
+                {/* Search Type Selection */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    검색 대상 선택
+                  </label>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setSearchType('following')}
+                      className={`flex-1 py-3 px-4 rounded-lg border-2 transition-colors ${
+                        searchType === 'following'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="font-medium">팔로잉</div>
+                      <div className="text-xs text-gray-500">
+                        {savedXList.followingCount}명
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setSearchType('followers')}
+                      className={`flex-1 py-3 px-4 rounded-lg border-2 transition-colors ${
+                        searchType === 'followers'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="font-medium">팔로워</div>
+                      <div className="text-xs text-gray-500">
+                        {savedXList.followersCount}명
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Find Friends Button */}
+                <button
+                  onClick={() => handleFindFriends()}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors mb-3"
+                >
+                  🔍 {searchType === 'following' ? '팔로잉' : '팔로워'} 중 Farcaster 친구 찾기
+                </button>
+
+                {/* Re-sync Button */}
+                <button
+                  onClick={handleSyncXList}
+                  disabled={isSyncing}
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors text-sm"
+                >
+                  {isSyncing ? '동기화 중...' : '🔄 X 리스트 다시 가져오기'}
+                </button>
+              </div>
+            ) : (
+              <div className="mb-6">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-yellow-800">
+                    아직 저장된 X 리스트가 없습니다.
+                    <br />
+                    아래 버튼을 클릭하여 팔로워/팔로잉 리스트를 가져오세요.
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleSyncXList}
+                  disabled={isSyncing}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  {isSyncing ? (
+                    <>
+                      <span className="animate-spin">⏳</span>
+                      X 리스트 가져오는 중...
+                    </>
+                  ) : (
+                    <>
+                      📥 X 리스트 가져오기 및 저장
+                    </>
+                  )}
+                </button>
+
+                <p className="text-xs text-gray-500 mt-3 text-center">
+                  팔로워와 팔로잉 리스트를 가져와서 7일간 저장합니다.
+                  <br />
+                  이후에는 저장된 데이터를 사용하여 API 비용을 절약합니다.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -332,10 +487,10 @@ export default function Home() {
           <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto text-center">
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <h2 className="text-xl font-bold text-gray-900 mb-2">
-              Finding Your Friends...
+              Farcaster 친구 찾는 중...
             </h2>
             <p className="text-gray-600">
-              This may take a moment as we search through your X following list.
+              {searchType === 'following' ? '팔로잉' : '팔로워'} 목록에서 Farcaster 사용자를 검색하고 있습니다.
             </p>
           </div>
         )}
@@ -361,8 +516,11 @@ export default function Home() {
                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                   />
                 </svg>
-                Search Again
+                다시 검색
               </button>
+              <span className="text-sm text-gray-500">
+                {searchType === 'following' ? '팔로잉' : '팔로워'} 검색 결과
+              </span>
             </div>
             <FriendsList friends={friendsData} totalSearched={totalSearched} />
           </div>
