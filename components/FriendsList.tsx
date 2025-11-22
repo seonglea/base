@@ -3,6 +3,7 @@
 import { Avatar, Name, Identity } from '@coinbase/onchainkit/identity';
 import { FollowButton } from './FollowButton';
 import { MessageButton } from './MessageButton';
+import { ShareButton } from './ShareButton';
 import { base } from 'viem/chains';
 
 export interface MatchedFriend {
@@ -58,7 +59,13 @@ export function FriendsList({ friends, totalSearched }: FriendsListProps) {
               </p>
             )}
           </div>
-          <div className="text-4xl">🎉</div>
+          <div className="flex items-center gap-3">
+            <ShareButton
+              matchCount={friends.length}
+              totalSearched={totalSearched || friends.length}
+            />
+            <div className="text-4xl">🎉</div>
+          </div>
         </div>
       </div>
 
