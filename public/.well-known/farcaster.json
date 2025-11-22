@@ -4,13 +4,30 @@
     "payload": "REPLACE_WITH_YOUR_PAYLOAD",
     "signature": "REPLACE_WITH_YOUR_SIGNATURE"
   },
-  "frame": {
-    "version": "next",
+  "baseBuilder": {
+    "ownerAddress": "REPLACE_WITH_YOUR_WALLET_ADDRESS"
+  },
+  "miniapp": {
+    "version": "1",
     "name": "Find X Friends",
+    "subtitle": "Discover friends on Farcaster",
+    "description": "Find which of your X (Twitter) followers and following are on Farcaster and Base. Connect with your social network on Web3.",
     "iconUrl": "https://your-app-url.vercel.app/icon.png",
     "homeUrl": "https://your-app-url.vercel.app",
     "splashImageUrl": "https://your-app-url.vercel.app/splash.png",
-    "splashBackgroundColor": "#ffffff",
-    "webhookUrl": "https://your-app-url.vercel.app/api/webhook"
+    "splashBackgroundColor": "#6366f1",
+    "webhookUrl": "https://your-app-url.vercel.app/api/webhook",
+    "primaryCategory": "social",
+    "tags": ["social", "farcaster", "twitter", "friends", "network"],
+    "screenshotUrls": [
+      "https://your-app-url.vercel.app/screenshot-1.png",
+      "https://your-app-url.vercel.app/screenshot-2.png"
+    ],
+    "heroImageUrl": "https://your-app-url.vercel.app/hero.png",
+    "tagline": "Find your X friends on Farcaster",
+    "ogTitle": "Find X Friends on Farcaster",
+    "ogDescription": "Discover which of your X followers are on Farcaster and Base",
+    "ogImageUrl": "https://your-app-url.vercel.app/og-image.png",
+    "noindex": true
   }
 }
