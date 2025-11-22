@@ -97,7 +97,7 @@ TWITTER_CLIENT_SECRET=발급받은_클라이언트_시크릿
 # API Keys (필수)
 NEYNAR_API_KEY=발급받은_키
 RAPIDAPI_KEY=발급받은_키
-RAPIDAPI_HOST=twitter-api45.p.rapidapi.com
+RAPIDAPI_HOST=twitter241.p.rapidapi.com
 UPSTASH_REDIS_REST_URL=발급받은_URL
 UPSTASH_REDIS_REST_TOKEN=발급받은_토큰
 ```

@@ -140,7 +140,7 @@ NEYNAR_API_KEY=your_neynar_api_key
 
 # RapidAPI (Twitter)
 RAPIDAPI_KEY=your_rapidapi_key
-RAPIDAPI_HOST=twitter-api45.p.rapidapi.com
+RAPIDAPI_HOST=twitter241.p.rapidapi.com
 
 # Redis (Upstash)
 UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
