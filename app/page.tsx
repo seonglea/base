@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
-import Image from 'next/image';
 import { FriendsList, MatchedFriend } from '@/components/FriendsList';
 
 // Conditional imports for paid mode
@@ -113,22 +112,8 @@ export default function Home() {
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* Logo - will display when logo.png is added to public/ folder */}
-            <Image
-              src="/logo.png"
-              alt="Find X Friends Logo"
-              width={40}
-              height={40}
-              className="rounded-lg"
-              onError={(e) => {
-                // Fallback to emoji if logo not found
-                e.currentTarget.style.display = 'none';
-                if (e.currentTarget.nextSibling) {
-                  (e.currentTarget.nextSibling as HTMLElement).style.display = 'block';
-                }
-              }}
-            />
-            <div className="text-2xl hidden">🔍</div>
+            {/* Logo emoji - simple and always works */}
+            <div className="text-2xl">🔍</div>
             <h1 className="text-xl font-bold text-gray-900">
               Find X Friends on Farcaster
             </h1>
