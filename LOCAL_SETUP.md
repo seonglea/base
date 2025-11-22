@@ -85,6 +85,7 @@ NEYNAR_API_KEY=your_neynar_api_key_here
 # ====================
 # 👉 https://rapidapi.com 에서 Twitter API 구독 후 발급
 RAPIDAPI_KEY=your_rapidapi_key_here
+RAPIDAPI_HOST=twitter-api45.p.rapidapi.com  # 사용하는 API 서비스에 따라 변경
 
 # ====================
 # Upstash Redis (캐싱) (필수)
@@ -145,12 +146,14 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ### 3️⃣ RapidAPI (Twitter 데이터)
 
 1. https://rapidapi.com 회원가입 / 로그인
-2. Twitter API 검색 (예: "Twitter v2" 또는 "Twitter API v2")
+2. Twitter API 검색 (예: "Twitter API v2" 또는 "twitter-api45")
 3. 적합한 Twitter API 서비스 구독 (무료 플랜 가능)
 4. API Key 복사 (Header에 들어갈 X-RapidAPI-Key)
-5. `.env.local`에 추가:
+5. API Host 확인 (예: `twitter-api45.p.rapidapi.com`)
+6. `.env.local`에 추가:
    ```env
    RAPIDAPI_KEY=발급받은_RapidAPI_키
+   RAPIDAPI_HOST=twitter-api45.p.rapidapi.com  # 구독한 서비스의 Host
    ```
 
 ### 4️⃣ Upstash Redis (캐싱)
