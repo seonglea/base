@@ -48,7 +48,7 @@ NEYNAR_API_KEY=neynar.com에서_발급
 
 # RapidAPI (필수)
 RAPIDAPI_KEY=rapidapi.com에서_발급
-RAPIDAPI_HOST=twitter-api45.p.rapidapi.com
+RAPIDAPI_HOST=twitter241.p.rapidapi.com
 
 # Upstash Redis (필수)
 UPSTASH_REDIS_REST_URL=upstash.com에서_발급
