@@ -3,6 +3,7 @@ import './globals.css';
 import { Providers } from './providers';
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_URL || 'http://localhost:3000'),
   title: 'Find X Friends on Farcaster',
   description: 'Discover which of your X followers are on Farcaster. First query FREE, then $1 USDC per query on Base.',
   manifest: '/manifest.json',
