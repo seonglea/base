@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Neynar Callback Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+    }
+    .info {
+      background: #f0f0f0;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+    .error {
+      background: #ffebee;
+      color: #c62828;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+    .success {
+      background: #e8f5e9;
+      color: #2e7d32;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+    button {
+      background: #6366f1;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background: #4f46e5;
+    }
+    code {
+      background: #f5f5f5;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 Neynar Callback Test</h1>
+
+  <div class="info">
+    <h3>Instructions:</h3>
+    <ol>
+      <li>Enter your Neynar Client ID below</li>
+      <li>Click "Test Neynar Login"</li>
+      <li>Sign in with Farcaster</li>
+      <li>Check if callback works</li>
+    </ol>
+  </div>
+
+  <div>
+    <label for="clientId"><strong>Neynar Client ID:</strong></label><br>
+    <input
+      type="text"
+      id="clientId"
+      placeholder="Enter your NEXT_PUBLIC_NEYNAR_CLIENT_ID"
+      style="width: 100%; padding: 8px; margin: 10px 0; font-size: 14px;"
+    >
+  </div>
+
+  <div>
+    <label for="callbackUrl"><strong>Callback URL:</strong></label><br>
+    <input
+      type="text"
+      id="callbackUrl"
+      value="http://localhost:3000/api/auth/farcaster/callback"
+      style="width: 100%; padding: 8px; margin: 10px 0; font-size: 14px;"
+    >
+    <small>This should match your app's callback URL</small>
+  </div>
+
+  <button onclick="testNeynarLogin()">🚀 Test Neynar Login</button>
+
+  <div id="result"></div>
+
+  <div class="info" style="margin-top: 30px;">
+    <h3>📋 Expected Flow:</h3>
+    <ol>
+      <li>Browser redirects to: <code>https://app.neynar.com/login?client_id=...</code></li>
+      <li>You sign in with Farcaster</li>
+      <li>Neynar redirects back to: <code>http://localhost:3000/api/auth/farcaster/callback?fid=...</code></li>
+      <li>Your app processes the callback</li>
+    </ol>
+  </div>
+
+  <div class="info">
+    <h3>🐛 If "postMessage" error occurs:</h3>
+    <p>This means Neynar cannot communicate back to your app.</p>
+    <p><strong>Possible causes:</strong></p>
+    <ul>
+      <li>Callback URL not registered in Neynar Dashboard</li>
+      <li>Client ID is incorrect</li>
+      <li>CORS/Origin issue</li>
+    </ul>
+  </div>
+
+  <script>
+    // Check URL params for callback data
+    window.addEventListener('DOMContentLoaded', function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const fid = urlParams.get('fid');
+      const error = urlParams.get('error');
+      const resultDiv = document.getElementById('result');
+
+      if (fid) {
+        resultDiv.innerHTML = `
+          <div class="success">
+            <h3>✅ Callback Success!</h3>
+            <p><strong>FID:</strong> ${fid}</p>
+            <p><strong>Signer UUID:</strong> ${urlParams.get('signer_uuid') || 'N/A'}</p>
+            <p>This means your Neynar callback is working!</p>
+          </div>
+        `;
+      } else if (error) {
+        resultDiv.innerHTML = `
+          <div class="error">
+            <h3>❌ Callback Error</h3>
+            <p><strong>Error:</strong> ${error}</p>
+            <p><strong>Message:</strong> ${urlParams.get('message') || 'N/A'}</p>
+          </div>
+        `;
+      }
+
+      // Load saved client ID
+      const saved = localStorage.getItem('neynar_test_client_id');
+      if (saved) {
+        document.getElementById('clientId').value = saved;
+      }
+    });
+
+    function testNeynarLogin() {
+      const clientId = document.getElementById('clientId').value.trim();
+      const callbackUrl = document.getElementById('callbackUrl').value.trim();
+      const resultDiv = document.getElementById('result');
+
+      if (!clientId) {
+        resultDiv.innerHTML = `
+          <div class="error">
+            <p>❌ Please enter your Neynar Client ID</p>
+            <p>Find it in your .env.local file: <code>NEXT_PUBLIC_NEYNAR_CLIENT_ID</code></p>
+          </div>
+        `;
+        return;
+      }
+
+      // Save for next time
+      localStorage.setItem('neynar_test_client_id', clientId);
+
+      // Build Neynar login URL
+      const redirectUri = encodeURIComponent(callbackUrl);
+      const neynarUrl = `https://app.neynar.com/login?client_id=${clientId}&redirect_uri=${redirectUri}`;
+
+      resultDiv.innerHTML = `
+        <div class="info">
+          <h3>🔄 Redirecting to Neynar...</h3>
+          <p><strong>URL:</strong></p>
+          <code style="word-break: break-all;">${neynarUrl}</code>
+          <p style="margin-top: 10px;">If redirect doesn't happen, <a href="${neynarUrl}" target="_blank">click here</a></p>
+        </div>
+      `;
+
+      // Log for debugging
+      console.log('Neynar Login URL:', neynarUrl);
+      console.log('Client ID:', clientId);
+      console.log('Callback URL:', callbackUrl);
+
+      // Redirect
+      setTimeout(() => {
+        window.location.href = neynarUrl;
+      }, 2000);
+    }
+  </script>
+</body>
+</html>
